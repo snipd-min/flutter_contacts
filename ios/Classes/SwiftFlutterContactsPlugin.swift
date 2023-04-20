@@ -420,7 +420,7 @@ public enum FlutterContacts {
 
 @available(iOS 9.0, *)
 public class SwiftFlutterContactsPlugin: NSObject, FlutterPlugin, FlutterStreamHandler, CNContactViewControllerDelegate, CNContactPickerDelegate {
-    private let rootViewController: UIViewController
+    private var rootViewController: UIViewController?
     private var externalResult: FlutterResult?
 
     public static func register(with registrar: FlutterPluginRegistrar) {
@@ -432,17 +432,37 @@ public class SwiftFlutterContactsPlugin: NSObject, FlutterPlugin, FlutterStreamH
             name: "github.com/QuisApp/flutter_contacts/events",
             binaryMessenger: registrar.messenger()
         )
-        let rootViewController = UIApplication.shared.delegate!.window!!.rootViewController!
-        let instance = SwiftFlutterContactsPlugin(rootViewController)
+        let instance = SwiftFlutterContactsPlugin()
         registrar.addMethodCallDelegate(instance, channel: channel)
         eventChannel.setStreamHandler(instance)
     }
 
-    init(_ rootViewController: UIViewController) {
-        self.rootViewController = rootViewController
+    public func checkRootViewController() {
+        if (self.rootViewController == nil) {
+            self.rootViewController = getRootViewController()
+        }
+    }
+
+    func getRootViewController() -> UIViewController? {
+        if #available(iOS 13.0, *) {
+            guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                  let sceneDelegate = scene.delegate as? UIResponder & UIWindowSceneDelegate,
+                  let rootViewController = sceneDelegate.window??.rootViewController else {
+                NSLog("rootViewController A1: null")
+                return nil
+            }
+            NSLog("rootViewController A: \(rootViewController)")
+            return rootViewController
+        } else {
+            let appDelegate = UIApplication.shared.delegate as! UIResponder & UIApplicationDelegate
+            NSLog("rootViewController B: \(appDelegate.window??.rootViewController)")
+            return appDelegate.window??.rootViewController
+        }
     }
 
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        checkRootViewController()
+        let rootViewController = self.rootViewController!
         switch call.method {
         case "requestPermission":
             DispatchQueue.global(qos: .userInteractive).async {
@@ -607,7 +627,7 @@ public class SwiftFlutterContactsPlugin: NSObject, FlutterPlugin, FlutterStreamH
                     contactView.delegate = self
                     // https://stackoverflow.com/a/39594589
                     let navigationController = UINavigationController(rootViewController: contactView)
-                    self.rootViewController.present(navigationController, animated: true, completion: nil)
+                    rootViewController.present(navigationController, animated: true, completion: nil)
                     self.externalResult = result
                 }
             }
@@ -615,7 +635,7 @@ public class SwiftFlutterContactsPlugin: NSObject, FlutterPlugin, FlutterStreamH
             DispatchQueue.main.async {
                 let contactPicker = CNContactPickerViewController()
                 contactPicker.delegate = self
-                self.rootViewController.present(contactPicker, animated: true, completion: nil)
+                rootViewController.present(contactPicker, animated: true, completion: nil)
                 self.externalResult = result
             }
         case "openExternalInsert":
@@ -630,7 +650,7 @@ public class SwiftFlutterContactsPlugin: NSObject, FlutterPlugin, FlutterStreamH
                 contactView.delegate = self
                 // https://stackoverflow.com/a/39594589
                 let navigationController = UINavigationController(rootViewController: contactView)
-                self.rootViewController.present(navigationController, animated: true, completion: nil)
+                rootViewController.present(navigationController, animated: true, completion: nil)
                 self.externalResult = result
             }
         default:
@@ -665,7 +685,7 @@ public class SwiftFlutterContactsPlugin: NSObject, FlutterPlugin, FlutterStreamH
 
     @objc func contactViewControllerDidCancel() {
         if let result = externalResult {
-            rootViewController.dismiss(animated: true, completion: nil)
+            self.rootViewController?.dismiss(animated: true, completion: nil)
             result(nil)
             externalResult = nil
         }
